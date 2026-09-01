@@ -193,7 +193,7 @@ void rt_object_detach_sethook(void (*hook)(struct rt_object *object))
  *            mailbox - mail is received by thread
  *            message queue - message is received by thread
  *
- * @param hook is the hook function.
+ * @param hook is the hook function.ye
  */
 void rt_object_trytake_sethook(void (*hook)(struct rt_object *object))
 {
