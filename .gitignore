@@ -1,0 +1,13 @@
+/Debug/
+
+# GFlow: STM32/CubeIDE generated build output
+/Release/
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.o
+*.d
+*.su
+*.cyclo
