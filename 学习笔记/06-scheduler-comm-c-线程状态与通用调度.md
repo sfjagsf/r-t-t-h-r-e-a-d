@@ -27,18 +27,25 @@ clock.c          ：系统 Tick 推进与时间片/定时器调用链
 
 ```text
 RT_THREAD_INIT     已初始化，尚未 startup
-RT_THREAD_READY    可参与调度
-RT_THREAD_SUSPEND  不能运行，正在等待
+RT_THREAD_READY    已进入就绪队列，等待获得 CPU
+RT_THREAD_RUNNING  当前正在某个 CPU 上执行
+RT_THREAD_SUSPEND  暂不能运行：等待 IPC、延时或被显式挂起
 RT_THREAD_CLOSE    已结束，等待资源清理
 ```
 
-RT-Thread 基础状态中通常没有独立 `RUNNING`。当前真正占用 CPU 的线程由：
+当前正在运行的线程还可由每个 CPU 的 `current_thread` 指针确定：
 
 ```text
 thread == rt_cpu_self()->current_thread
 ```
 
-表示；它的基础状态仍可为 `READY`。
+在当前 `scheduler_up.c` 中，调度器首次选择线程运行时会将其从 READY 队列移除，并明确设置：
+
+```c
+RT_SCHED_CTX(to_thread).stat = RT_THREAD_RUNNING;
+```
+
+因此 `current_thread` 不是取代 RUNNING 状态，而是说明具体由哪个 CPU 在运行该线程。
 
 ### `SUSPEND` 的细化原因
 
