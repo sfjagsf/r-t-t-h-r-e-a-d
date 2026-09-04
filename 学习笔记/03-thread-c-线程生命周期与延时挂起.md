@@ -346,6 +346,115 @@ rt_object_get_name(&thread->parent, buffer, size)
 
 线程名称实际保存在 `thread->parent.name`，说明线程对象的通用身份仍由 `rt_object` 提供。
 
+## TCB：`struct rt_thread` 与 `thread.c` 的关系
+
+`struct rt_thread` 就是 RT-Thread 的线程控制块（TCB）。线程函数和独立栈负责“执行什么”，TCB 则是内核管理该线程的完整档案：
+
+```text
+rt_thread（TCB）
+├─ rt_object parent：名称、Thread 对象类型、静态/动态属性
+├─ sp / entry / parameter / stack_addr / stack_size：CPU 上下文与栈
+├─ sched_thread_ctx：状态、就绪/等待链表节点、优先级、时间片
+├─ thread_timer：延时与 IPC 超时
+├─ taken_object_list / pending_object：mutex 持有与等待关系
+├─ event_set / event_info：事件等待条件
+├─ error：阻塞操作最终结果
+├─ cleanup：线程退出时的清理回调
+└─ signals / Smart / pthread / CPU usage 等可选扩展
+```
+
+### 1. 对象身份：`parent`
+
+```c
+struct rt_object parent;
+```
+
+线程也是 `RT_Object_Class_Thread` 对象，因此可统一按名称查找、列举；静态/动态线程也由该对象基础部分区分。
+
+### 2. 入口、栈与 `sp`
+
+```c
+void *sp;
+void *entry;
+void *parameter;
+void *stack_addr;
+rt_uint32_t stack_size;
+```
+
+```text
+entry / parameter：线程入口函数及其参数
+stack_addr / stack_size：线程独占栈内存范围
+sp：线程上次暂停时保存的 CPU 栈现场位置，不是单纯栈首地址
+```
+
+`_thread_init()` 会将栈填为 `'#'`，用于栈高水位和溢出检查；随后调用 `rt_hw_stack_init(entry, parameter, 栈顶, _thread_exit)` 构造首次运行的伪 CPU 现场。
+
+调度器切换时保存旧线程现场到 `from_thread->sp`，再从 `to_thread->sp` 恢复新线程现场。
+
+### 3. 调度上下文：`sched_thread_ctx`
+
+核心内容：
+
+```text
+thread_list_node：线程当前所在的一个内核链表节点
+stat：INIT / READY / RUNNING / SUSPEND / CLOSE 及附加标志
+init_priority / current_priority：基础优先级与当前实际优先级
+init_tick / remaining_tick：配置时间片与当前剩余时间片
+sched_flag_ttmr_set：thread_timer 是否已启动
+```
+
+`thread_list_node` 会随状态移动：
+
+```text
+READY：priority_table[priority]
+等待信号量/事件/邮箱等：对应对象的 suspend_thread
+CLOSE：_rt_thread_defunct
+```
+
+一条线程同一时刻不能同时位于多个这样的链表中。
+
+### 4. `error` 与 `thread_timer`
+
+```c
+rt_err_t error;
+struct rt_timer thread_timer;
+```
+
+`thread_timer` 是每条线程预先内嵌的一次性定时器，用于 delay 与带超时 IPC 等待。
+
+```text
+资源先到：停止 thread_timer，error = RT_EOK，线程回 READY
+超时先到：_thread_timeout() 移出等待链表，error = -RT_ETIMEOUT，线程回 READY
+```
+
+`sched_flag_ttmr_set` 协调“正常 IPC 唤醒”和“超时回调”对同一线程的竞争，避免重复入队。
+
+### 5. Mutex 与事件字段
+
+启用 mutex 后：
+
+```text
+taken_object_list：该线程当前持有的全部 mutex
+pending_object：该线程当前正在等待的对象；等待 mutex 时用于优先级继承
+```
+
+线程退出时 `_thread_detach_from_mutex()` 会从等待 mutex 链表移除自己，并释放它仍持有的 mutex，防止锁永久归属于死亡线程。
+
+启用 event 后：
+
+```text
+event_set：请求或实际获得的事件位
+event_info：AND / OR / CLEAR 等接收规则
+```
+
+### 6. `_thread_init()`、`_thread_timeout()`、`_thread_exit()`
+
+```text
+_thread_init()：填充 TCB、初始化调度字段、栈、thread_timer、IPC/扩展字段
+_thread_timeout()：超时时，将 SUSPEND 线程移出等待链表、置 error、放入 READY 队列
+_thread_exit()：入口函数返回后关闭线程、处理 mutex、加入 defunct 等待其他上下文回收
+```
+
 ## 建议复习问题
 
 1. 为什么线程入口函数返回后必须进入 `_thread_exit()`？
@@ -354,3 +463,6 @@ rt_object_get_name(&thread->parent, buffer, size)
 4. `rt_thread_delay()` 与 `rt_thread_delay_until()` 的时间基准有什么不同？
 5. 挂起与恢复时，线程分别在哪些链表/队列之间移动？
 6. 为什么不能任意挂起其他线程？
+7. `sp`、`stack_addr`、`entry` 分别代表什么？
+8. 为什么每条线程都内嵌一个 `thread_timer`？
+9. 为什么一个线程的 `thread_list_node` 不能同时挂在两个等待/就绪链表中？
