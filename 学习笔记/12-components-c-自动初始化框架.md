@@ -154,3 +154,106 @@ initialize uart_board_init
 ```
 
 自动初始化框架让组件“声明自己何时应初始化”，系统统一负责按顺序执行。
+
+---
+
+## 8. 后半段：为什么 RT-Thread 要接管 `main`
+
+裸机程序通常在 C 运行库准备完成后直接进入用户的 `main()`。RT-Thread 必须先建立调度器、时间系统和系统线程，用户代码才能安全使用线程与 IPC。
+
+因此，`components.c` 在 `RT_USING_USER_MAIN` 配置下为不同编译器提供入口包装：
+
+| 编译器 | 包装方式 | 目的 |
+|---|---|---|
+| ARMCC | `$Sub$$main()` | 在原始 `main` 前插入内核启动；原始函数名为 `$Super$$main()` |
+| IAR | `__low_level_init()` | 在 C 启动早期调用 `rtthread_startup()` |
+| GCC | `entry()` | 链接参数把入口指向 `entry`，再调用 `rtthread_startup()` |
+
+例如 GCC：
+
+```c
+int entry(void)
+{
+    rtthread_startup();
+    return 0;
+}
+```
+
+这不会丢弃用户 `main()`；而是使其稍后在 RT-Thread 的主线程中执行。
+
+## 9. `main_thread_entry()`：运行组件与用户 `main()` 的线程入口
+
+```c
+static void main_thread_entry(void *parameter)
+{
+    rt_components_init();       /* 若开启 RT_USING_COMPONENTS_INIT */
+    rt_hw_secondary_cpu_up();   /* 仅 SMP */
+    main();
+}
+```
+
+`main_thread_entry` 是内核主线程的入口，并非用户业务 `main` 本身：
+
+```text
+主线程首次被调度
+    -> rt_components_init()：系统/应用阶段自动初始化
+    -> SMP 时拉起其他 CPU
+    -> 调用用户 main()
+```
+
+因此用户 `main()` 执行时，调度器已经工作，能够调用 RT-Thread 的线程、IPC、设备、定时器等 API。
+
+## 10. `rt_application_init()`：创建主线程
+
+```c
+tid = rt_thread_create("main", main_thread_entry, RT_NULL,
+                       RT_MAIN_THREAD_STACK_SIZE,
+                       RT_MAIN_THREAD_PRIORITY, 20);
+rt_thread_startup(tid);
+```
+
+该函数创建名为 `main` 的线程，并让其进入 `READY` 状态；调度器尚未开始时，它不会实际运行。
+
+| 配置 | 创建接口 | TCB 与栈来源 |
+|---|---|---|
+| `RT_USING_HEAP` | `rt_thread_create()` | 从堆动态分配 |
+| 未开启堆 | `rt_thread_init()` | `main_thread` 和 `main_thread_stack[]` 静态分配 |
+
+堆版本依赖 `rt_hw_board_init()` 已初始化堆，这也是启动顺序不可颠倒的原因。
+
+## 11. `rtthread_startup()`：内核启动总顺序
+
+```text
+关闭本 CPU 中断
+  -> rt_hw_board_init()
+  -> rt_show_version()
+  -> rt_system_timer_init()
+  -> rt_system_scheduler_init()
+  -> rt_system_signal_init()       （可选）
+  -> rt_application_init()         （创建 main 线程）
+  -> rt_system_timer_thread_init() （可选软定时器线程）
+  -> rt_thread_idle_init()
+  -> rt_thread_defunct_init()
+  -> rt_system_scheduler_start()
+```
+
+- **关闭中断**：避免初始化中的内核数据结构被中断提前访问。
+- **板级初始化**：准备时钟、串口、中断控制器、堆等。
+- **定时器与调度器**：准备时间管理、就绪链表和优先级位图。
+- **系统线程**：main、软定时器服务、idle、defunct 回收线程进入可调度状态。
+- **启动调度器**：选中最高优先级 `READY` 线程并首次切换上下文；通常不再返回。
+
+## 12. 两阶段自动初始化：时机不能混淆
+
+```text
+rt_hw_board_init()
+  -> BSP 通常调用 rt_components_board_init()
+     -> 板级阶段：驱动、硬件、堆等
+
+调度器启动
+  -> main_thread_entry()
+     -> rt_components_init()
+        -> 系统/应用阶段：文件系统、网络、应用组件等
+```
+
+完整地看，`components.c` 的职责是：**用链接器段收集初始化函数，并把它们放在内核启动链的正确阶段执行。**
