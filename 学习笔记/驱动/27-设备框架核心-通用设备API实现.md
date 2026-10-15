@@ -6,6 +6,10 @@
 > `include/rtthread.h` 只声明 `rt_device_*()`；本文件实现这些 API，负责设备的
 > **注册、查找、生命周期状态维护，以及向具体驱动分发调用**。
 
+承接 [第 26 节](26-设备框架头文件-通用设备对象与接口.md)。阅读重点是沿一次
+`register → find → open → read/write → close` 路径，追踪 `flag`、`open_flag` 和
+`ref_count` 分别由谁修改。
+
 ## 1. 文件在设备框架中的位置
 
 ```text
@@ -72,6 +76,10 @@ rt_err_t rt_device_register(rt_device_t dev,
 设备注册后才能通过名称查找。这里的注册不等于硬件初始化：它不会调用设备的 `init`
 回调，硬件常在第一次 `open()` 时按需初始化。
 
+`rt_object_init()` 会给父对象加上内核的静态对象标记。这里的“静态”表示存储由调用者
+提供，并不等于该设备必须由 C 的 `static` 定义；`rt_device_create()` 得到的堆对象在
+注册期间也会带这个标记。设备的内存来源与注册状态应分开判断。
+
 `flags` 描述设备能力和生命周期状态，例如 `RT_DEVICE_FLAG_RDWR`、
 `RT_DEVICE_FLAG_INT_RX`、`RT_DEVICE_FLAG_STANDALONE`；它不同于一次 `open()` 所传的
 `oflag`，后者描述当前访问方式。
@@ -127,6 +135,9 @@ create → 填写回调/私有数据 → register → open ... close → unregis
 `rt_device_destroy()` 仅适用于动态分配对象。它要求设备已经不再注册，且不是系统对象，
 最后调用 `rt_free()`。嵌在全局或静态结构体中的设备绝不能调用它。
 
+`create()` 只清零 `sizeof(struct rt_device)`，不会清零附加空间，也不会自动把
+`user_data` 指向附加空间。使用附加区时应从对齐后的基础对象末尾计算地址，再自行初始化。
+
 ## 5. 初始化与打开
 
 ### 5.1 `rt_device_init()`
@@ -157,7 +168,7 @@ rt_err_t rt_device_open(rt_device_t dev, rt_uint16_t oflag);
 设备是 STANDALONE 且已打开？
   └─ 返回 -RT_EBUSY
 
-首次打开，或新的读写方式与当前方式不同？
+首次打开，或 RT_DEVICE_OFLAG_MASK 覆盖的模式不同？
   └─ 调用驱动 open(dev, oflag)
 
 成功（也接受 -RT_ENOSYS）？
@@ -176,6 +187,15 @@ rt_err_t rt_device_open(rt_device_t dev, rt_uint16_t oflag);
 多次打开，框架以 `ref_count` 记录打开者数量。设备没有 `open` 回调时，框架仍会保存
 请求的访问方式。
 
+掩码 `RT_DEVICE_OFLAG_MASK` 的值为 `0xf0f`，除访问位和 `OPEN` 位外，还包含传统串口
+使用的 `INT_RX/DMA_RX/INT_TX/DMA_TX` 位。因此模式比较不只是读写权限比较。
+
+当前源码接受 `-RT_ENOSYS` 后仍建立打开状态并增加计数，**但返回值仍是 `-RT_ENOSYS`**，
+不会改写为 `RT_EOK`。分析底层回调的错误处理时，必须同时看返回值和字段变化。
+
+通用层不检查只读/只写权限，也不替底层保存模式；存在 `open` 回调时，模式字段通常
+由驱动维护。所有调用者共享一份 `open_flag`，重复打开不能视为相互独立的会话。
+
 ## 6. 关闭与数据通路
 
 ### 6.1 `rt_device_close()`
@@ -189,6 +209,9 @@ rt_err_t rt_device_close(rt_device_t dev);
 
 当最后一次 `close` 返回 `RT_EOK` 或 `-RT_ENOSYS` 时，框架将 `open_flag` 清为
 `RT_DEVICE_OFLAG_CLOSE`。这种设计防止共享设备被其中一个使用者提前关闭硬件。
+
+若最后一次驱动 `close` 返回其他错误，`ref_count` 已减为零，`open_flag` 却不会清零，
+框架也不自动回滚计数。调用者需要按驱动约定处理，不能假设关闭失败就仍保持原引用数。
 
 ### 6.2 `rt_device_read()` / `rt_device_write()`
 
@@ -211,6 +234,9 @@ return 0;
 因此必须先成功 `open()` 才能通过框架读写。返回值是 `rt_ssize_t`，正常情况表示实际
 传输量；框架层失败时返回 `0`，错误原因保存在 errno：`-RT_ERROR` 表示设备未打开，
 `-RT_ENOSYS` 表示驱动没有对应回调。
+
+调用底层回调后，其返回值会原样向上传递，可能包含负错误码。`0` 也可能只是当前没有
+数据；成功路径不会统一清除 errno，所以不能把之前遗留的 errno 当成本次失败的证据。
 
 对于块设备，`pos` 和 `size` 的单位是块而非字节；串口、ADC 等字符型设备通常忽略
 `pos`，但最终语义由具体驱动定义。
@@ -261,7 +287,7 @@ dev->tx_complete = tx_done
 
 ## 8. `RTM_EXPORT()`
 
-每个公开 API 后面都有类似：
+多数公开实现后面有类似标记（当前文件的 `rt_device_init()` 后没有此标记）：
 
 ```c
 RTM_EXPORT(rt_device_open);
@@ -302,5 +328,6 @@ RTM_EXPORT(rt_device_open);
 5. `unregister` 不释放静态对象；动态设备须在注销后调用 `destroy`；
 6. `rx_indicate/tx_complete` 是设备到上层的异步通知，而不是上层调用设备的操作接口。
 
-下一份可继续阅读 `components/drivers/include/rtdevice.h`：它按配置汇集串口、I2C、SPI、
-ADC 等专用驱动头文件，说明设备框架如何向各类别扩展。
+接下来经 `components/drivers/include/rtdevice.h` 的配置入口，阅读
+[第 28 节：传统串口接口](28-传统串口驱动接口-对象配置与硬件操作表.md)。串口将提供
+一组真正的设备回调，帮助把本章的通用流程落实到具体设备类别。
