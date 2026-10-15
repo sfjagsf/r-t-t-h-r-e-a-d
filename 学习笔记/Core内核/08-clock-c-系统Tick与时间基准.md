@@ -2,6 +2,9 @@
 
 > 本笔记对应 `src/clock.c`。它将硬件时基中断接入 RT-Thread 内核：维护系统 Tick、推进线程时间片、检查内核定时器，并提供毫秒/Tick 转换。
 
+与 [05 定时器](05-timer-c-内核定时器与超时.md) 配合阅读：`clock.c` 推进时间，
+`timer.c` 判断哪些 deadline 已到，调度器再决定被唤醒线程何时执行。
+
 ## 1. 总体 Tick 中断链
 
 ```text
@@ -180,7 +183,12 @@ rt_tick_increase();             // 推进 1 Tick
 rt_tick_increase_tick(tick);    // 一次推进多个 Tick
 ```
 
-两个函数流程相同，区别仅为推进数量。批量版本通常用于 Tickless 低功耗：MCU 休眠期间不逐 Tick 产生中断，醒来后根据实际经过时间一次补偿多个 Tick。
+两个函数的主要流程相近，批量版本常用于 Tickless 时间补偿，但不是循环调用 N 次
+`rt_tick_increase()`：一次批量调用只执行一次 Tick Hook、一次时间片更新和一次定时器
+检查。当前单次版本还带有可选 VDSO 时钟同步，批量版本没有同样的结尾代码。
+
+因此不能用批量推进模拟 N 次精确周期回调，也不能按 N 次时间片还原休眠期间各线程
+本来应有的运行顺序。补偿 Tick 数应由 BSP/电源管理根据硬件时基计算。
 
 每次推进会调用：
 
@@ -214,6 +222,10 @@ rt_thread_delay(rt_tick_from_millisecond(10));
 ```
 
 转换对不足一个 Tick 的时间采用**向上取整**，保证“请求延时”不会因为整数截断而变成 0 Tick。
+
+例如 100 Hz 下将 1 ms 转为 1 Tick，表示定时器使用一个 Tick 的量化值，并非确保从
+调用瞬间起严格经过 10 ms；调用的 Tick 相位、ISR 延迟和唤醒后的调度都影响墙上时间。
+`rt_tick_get_millisecond()` 的数值单位也不意味着具备 1 ms 分辨率。
 
 例如 `RT_TICK_PER_SECOND = 100`：
 

@@ -2,6 +2,10 @@
 
 > 对应 `src/slab.c`，仅在 `RT_USING_SLAB` 开启时参与编译。Slab 在底层“连续页分配器”之上，为常见小尺寸请求建立固定 chunk 的 zone，减少频繁小对象申请的搜索成本与外部碎片。
 
+先读 [17 堆 API 分层](17-kservice-c-内核通用服务.md)，再与
+[21 small mem](21-mem-c-小内存堆分配器.md)、[22 memheap](22-memheap-c-多内存区堆管理.md)
+比较。Slab 的页是分配粒度，不表示本文件自动提供 MMU 虚拟地址映射或进程隔离。
+
 ## 1. 与前三种内存管理器的区别
 
 |组件|主要策略|典型优势|
@@ -320,7 +324,15 @@ if (z->z_nfree++ == 0)
 z_nfree == z_nmax
 ```
 
-即所有 chunk 都已空闲时，zone 不会立刻归还页，而是先移入 `zone_free` 缓存。
+仅“所有 chunk 都空闲”还不够，当前源码同时要求该尺寸类还有其他可分配 zone：
+
+```c
+z->z_nfree == z->z_nmax &&
+(z->z_next || slab->zone_array[z->z_zoneindex] != z)
+```
+
+满足条件才移入 `zone_free` 缓存；若它是该尺寸类唯一的可用 zone，则继续留在
+`zone_array` 中供同类请求复用。
 
 ```text
 zone 全空
@@ -343,6 +355,9 @@ rt_slab_page_free(m, z, slab->zone_size / RT_MM_PAGE_SIZE);
 
 这是一种滞后释放：保留少量空 zone 供后续快速复用，又避免无限囤积页。
 
+阈值只约束 `zone_free` 缓存，不表示所有尺寸类一共最多保留两个空 zone。不同尺寸类
+仍可能各自保留可分配 zone，因此“小对象全部释放”不等于所有页已回到底层空闲页链。
+
 ## 11. `rt_slab_realloc()`
 
 |情况|行为|
@@ -354,6 +369,10 @@ rt_slab_page_free(m, z, slab->zone_size / RT_MM_PAGE_SIZE);
 |大块变化|申请新空间，复制 `min(old,new)`，释放旧页块|
 
 slab 的 `realloc` 不像 memheap 那样尝试吞并右侧物理块；它更重视固定 chunk 尺寸与快速分类复用。
+
+直接 `rt_slab_*` 操作没有系统堆封装的统一锁，独立使用时应协调同一 heap 的并发。
+页接口和小对象接口也不能混用：`rt_page_alloc(npages)` 配对 `rt_page_free(addr, npages)`，
+普通 `rt_malloc()` 配对 `rt_free()`；不能将 chunk 内部地址或页段中途地址作为释放起点。
 
 ## 12. 源码复习问题
 

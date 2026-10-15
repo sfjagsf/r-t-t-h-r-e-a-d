@@ -2,6 +2,9 @@
 
 > 本笔记对应 `src/cpu_mp.c`，仅在 `RT_USING_SMP` 开启时参与编译。`MP` 表示 Multiprocessor：多个 CPU 能真正并行执行内核代码。
 
+与 [13 单核 CPU](13-cpu-up-c-单核CPU对象与自旋锁.md) 逐函数对照，再看
+[15 多核调度器](15-scheduler-mp-c-多核调度器.md) 如何在切换期间管理调度器锁。
+
 ## 1. 每核一个 `struct rt_cpu`
 
 ```c
@@ -25,6 +28,9 @@ struct rt_cpu *rt_cpu_self(void)
 ```
 
 `rt_cpu_self()` 返回本核 CPU 对象；`rt_cpu_index(n)` 返回指定编号 CPU 对象。跨核访问对方 CPU 的数据必须遵守相应同步规则。
+
+当前 MP `rt_cpu_index(n)` 直接取 `_cpus[n]`，不像 UP 版本那样检查编号并返回空指针；
+调用者应先保证 `0 <= n < RT_CPUS_NR`。得到指针也不代表该 CPU 的运行状态已经被锁住。
 
 ## 2. 真正的硬件自旋锁
 
@@ -126,6 +132,9 @@ rt_hw_spinlock_t _cpus_lock;
 ```
 
 所以 SMP 中某些传统“关中断”调用不仅影响本核中断，也会通过 `_cpus_lock` 串行化 CPU 间的相关临界区。
+
+`rt_cpus_lock()` 不是向所有 CPU 广播停止执行。它关闭本核中断并取得一把协作锁，
+只有遵守同一锁协议的其他路径会被排除；其他 CPU 上不取此锁的代码和 DMA 仍可运行。
 
 ## 6. `cpus_lock_nest`：避免同线程自死锁
 
@@ -231,6 +240,10 @@ IPI：通知目标 CPU 尽快执行调度决定
 ```
 
 持锁区域必须短小，且不能等待信号量、互斥锁、消息或延时；否则一个 CPU 持锁睡眠时，其他 CPU 只能忙等，问题比单核更严重。
+
+普通对象 spinlock 默认不可递归，`cpus_lock_nest` 只为特殊 `_cpus_lock` 路径提供
+嵌套支持，不能推广为任意锁都能重复获取。若 ISR 也取同一对象锁，线程路径应使用
+irqsave，避免 ISR 等待被自己打断的持锁线程。
 
 ## 源码锚点：MP 的 spinlock 同时禁止本核调度并取得硬件锁
 

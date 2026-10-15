@@ -2,6 +2,9 @@
 
 > 对应 `src/memheap.c`，仅在 `RT_USING_MEMHEAP` 开启时参与编译。它允许把内部 SRAM、外部 SDRAM、DMA 专用 RAM 等多段独立连续内存分别建立为 `rt_memheap` 对象。
 
+与 [21 small mem](21-mem-c-小内存堆分配器.md) 比较两条链的用途，再结合
+[17 系统堆封装](17-kservice-c-内核通用服务.md) 理解默认 heap 与自动回退。
+
 ## 1. 与 `small mem` 的定位差异
 
 |维度|`mem.c` / small mem|`memheap.c` / memheap|
@@ -11,6 +14,10 @@
 |块关系|物理块链|物理块链 + 空闲块链|
 |并发保护|由外层通用 malloc 封装处理|每个 `rt_memheap` 内嵌信号量锁|
 |扩大 `realloc`|通常申请、复制、释放|优先吞并后方相邻空闲块以原地扩容|
+
+每个 memheap 使用信号量串行化正常线程访问，这类接口不能因为对象带有“锁”就被
+当成中断安全分配器。多个 heap 分别管理各自连续区域，不会跨两个物理不连续区域
+拼成一个大块；成功分配仍要求某个 heap 中有足够连续空间。
 
 ```text
 internal_heap → 内部 SRAM
@@ -209,6 +216,13 @@ max_used = max_used_size
 
 ## 9. 辅助函数和调试命令
 
+自动回退只提供容量选择，不按 DMA 可达性、缓存属性、保持供电或执行权限筛选内存。
+需要 DMA 专用内存时，应明确选择满足硬件要求的 heap，并单独处理对齐及缓存一致性；
+`rt_malloc()` 返回非空不等于该地址对特定 DMA 控制器可用。
+
+拆除 heap 前必须停止新分配并确保已分配块不再被使用；`rt_memheap_detach()` 移除
+信号量和对象登记，不会追踪并替应用回收所有业务指针，也不会释放 BSP 提供的 RAM。
+
 `_remove_next_ptr()` 在调用者已持有 `heap->lock` 时，把一个空闲块同时从：
 
 ```text
@@ -227,7 +241,7 @@ block list
 
 `memheaptrace` 遍历物理块链，不只输出已用块；空闲块通常显示空白线程名。`memheapcheck` 只是辅助诊断，当前源码的部分链关系检查不能证明链表完全正确，且它只关闭本 CPU 中断，SMP 下不是严格一致快照。
 
-## 11. 源码锚点：两条链的真实维护
+## 10. 源码锚点：两条链的真实维护
 
 ### 分配只扫描 `next_free`，已用块只从 free list 移除
 
@@ -281,5 +295,3 @@ if (!RT_MEMHEAP_IS_USED(header_ptr->prev))
 ```
 
 左邻居直接跨过原 `header_ptr`；原块头被左块吞并，所以 `insert_header = RT_FALSE`，不能把同一空闲区域重复插入 free list。
-
-```

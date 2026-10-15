@@ -1,5 +1,9 @@
 # RT-Thread `thread.c` 学习笔记：线程生命周期、延时、挂起与恢复
 
+承接 [02 对象管理](02-object-c-统一对象管理.md)。建议先看本章“公开生命周期”部分，
+再回查 `_thread_init/_thread_timeout`；挂起与唤醒需要结合
+[04 IPC](04-ipc-c-进程间通信组件.md)、[06 通用调度](06-scheduler-comm-c-线程状态与通用调度.md)。
+
 ## 文件定位
 
 `src/thread.c` 是线程组件的实现文件。它建立在 `rtdef.h` 定义的 `struct rt_thread` 和 `object.c` 的统一对象管理机制之上。
@@ -150,6 +154,10 @@ rt_err_t rt_thread_delay(rt_tick_t tick)
 
 从调用 API 的当前 Tick 开始等待 `tick` 个 Tick。
 
+当前 `_thread_sleep(0)` 返回 `-RT_EINVAL`，`rt_thread_mdelay(0)` 也走此路径；让出
+同优先级执行机会应使用 `rt_thread_yield()`。毫秒换算会向上取整为 Tick，但实际
+墙上时间还受调用时的 Tick 相位和被唤醒后的调度延迟影响，不能作为精密硬件延时。
+
 ```text
 工作 30 Tick → rt_thread_delay(100)
 → 下轮开始相对本轮开始约过去 130 Tick
@@ -196,6 +204,11 @@ inc_tick：周期长度
 若工作已经超过周期，函数不再等待，将 `*tick` 重置为当前 Tick，重新建立后续周期基准。
 
 普通延时正常到期时，内部超时回调会写 `-RT_ETIMEOUT` 唤醒线程；延时 API 恢复后会将其清回 `RT_EOK`，因此调用者正常得到成功结果。
+
+`delay_until` 保持的是计划 Tick 基准，不是硬实时执行保证。当前源码在已经达到或
+超过下个周期时将基准重置为当前 Tick，不会循环补跑所有错过的周期。普通 `_thread_sleep`
+返回的是挂起操作的 `err`，与 `delay_until` 返回 `thread->error` 也不同；分析信号或
+提前唤醒时，不能把两种返回路径当成完全相同。
 
 ## 六、统一线程控制：`rt_thread_control()`
 
@@ -509,6 +522,10 @@ INIT
 它不进入 SUSPEND，不等待资源；主要让同优先级 READY 线程获得运行机会。
 
 ### `rt_thread_close()`、`detach()`、`delete()`
+
+具体资源回收见 [09 defunct](09-defunct-c-线程延后回收.md)。即使静态线程 detach
+调用已经返回，也不能立刻复用 TCB/栈给新线程；后台仍可能访问它们。线程持有的业务
+资源、DMA 缓冲区等需要单独的退出协议，内核解除 mutex 关系不代表业务状态已恢复。
 
 | 接口 | 适用对象 | 做什么 | 是否最终 free TCB/栈 |
 | --- | --- | --- | --- |

@@ -2,6 +2,9 @@
 
 > 本笔记对应 `src/idle.c`。idle 线程是每个 CPU 的最低优先级兜底线程：所有普通线程都不可运行时，它保证调度器仍有线程可选。
 
+与 [09 defunct](09-defunct-c-线程延后回收.md) 一起阅读后台回收，再结合
+[11 IRQ](11-irq-c-中断上下文与嵌套计数.md) 区分 idle 线程与中断的执行上下文。
+
 ## 1. 核心作用
 
 ```text
@@ -25,7 +28,8 @@ static rt_uint8_t idle_thread_stack[RT_CPUS_NR][IDLE_THREAD_STACK_SIZE];
 RT_THREAD_PRIORITY_MAX - 1
 ```
 
-即最低优先级；任意普通 READY 线程都会优先运行。
+即最低优先级。正常业务线程应使用高于 idle 的优先级；若应用也使用最低优先级，
+便可能与 idle 同级竞争，不能概括为任意普通线程一定先于 idle 运行。
 
 idle 线程不能被挂起、等待 IPC 或延时，否则所有普通线程阻塞时系统会没有 READY 线程，调度器失去兜底对象。
 
@@ -151,7 +155,8 @@ static rt_uint8_t idle_thread_stack[RT_CPUS_NR][IDLE_THREAD_STACK_SIZE];
   -> rt_thread_startup()
 ```
 
-优先级数值最大意味着最低优先级；只要有任意普通 READY 线程，idle 就不会被选择。
+优先级数值最大意味着最低优先级；存在更高优先级 READY 线程时，idle 不会优先于它
+被选择。idle 自身执行时处于 RUNNING，不必始终留在 READY 队列。
 
 ## 7. `idle_thread_entry()` 的 CPU 分工
 
@@ -182,11 +187,15 @@ CPU0 的 idle 循环则依次：
 Hook 实际在 idle 线程上下文直接调用，不在中断上下文。它应当：
 
 - 短小；
-- 不长期阻塞；
+- 不阻塞、不等待 IPC、不调用线程延时；
 - 不假设固定调用周期；
 - 不做会永久阻止 idle 主循环的死循环。
 
 因为一旦普通线程变 READY，idle 随时会被抢占，所以 idle hook 不能承担严格周期任务。
+
+SMP 次核直接进入 `rt_hw_secondary_cpu_idle_exec()` 的循环，不经过 CPU0 的 Hook
+遍历和通用 PM 分支。因此不能假设同一个 idle Hook 会在所有 CPU 上执行。WFI/WFE
+也不等同于把 idle 从调度队列挂起，其唤醒与低功耗时基由架构/BSP 负责。
 
 ## 源码锚点：每 CPU 一个 idle TCB 的建立
 

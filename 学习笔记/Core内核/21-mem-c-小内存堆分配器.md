@@ -2,6 +2,10 @@
 
 > 对应 `src/mem.c`，仅在 `RT_USING_SMALL_MEM` 开启时参与编译。它是 RT-Thread 常见默认动态堆实现之一，为动态线程、动态 IPC、动态定时器等对象提供底层内存。
 
+先读 [17 系统堆封装](17-kservice-c-内核通用服务.md)，再追踪 `lfree`、`next/prev`
+及块头已用标志。`RT_USING_SMALL_MEM` 开启算法，`RT_USING_SMALL_MEM_AS_HEAP` 才将其
+选为通用 `rt_malloc()` 的后端，两者作用不同。
+
 ## 1. 它管理的是什么
 
 `mem.c` 接收 BSP 提供的一整段连续 RAM，把它分成可变大小的内存块：
@@ -164,6 +168,9 @@ void *rt_smem_alloc(rt_smem_t m, rt_size_t size)
 
 本版本扩大时不尝试把后方相邻空闲块直接并入旧块。因此 `realloc()` 的返回地址不保证等于旧地址。
 
+以下临时变量写法适用于 `new_size > 0`；零长度请求需要按释放语义单独处理，避免把
+已经释放的旧指针继续当作有效内存。
+
 ```c
 void *tmp = rt_realloc(ptr, new_size);
 if (tmp != RT_NULL)
@@ -208,9 +215,17 @@ mem = rmem - SIZEOF_STRUCT_MEM
 
 核心规律：**分配时切分，释放时合并。** 这能减少外部碎片，但无法保证任意时刻都存在足够大的连续块。
 
+例如空闲总量为 3 KB，但被已用块隔成三个 1 KB 区域，2 KB 请求仍可能失败；释放
+相邻块才能合并，分配器不会搬动仍在使用的内存。统计中的总空闲量与最大可分配连续
+块应分开理解。
+
 ## 8. 并发边界与调试接口
 
 `rt_smem_alloc()`/`rt_smem_free()` 本身没有在函数体内加锁；通用 `rt_malloc()`、`rt_free()` 的上层封装负责串行化访问，相关封装在 `kservice.c`。
+
+直接使用独立 `rt_smem_*` 堆时，调用者需提供一致的锁协议；绕过通用封装并不自动
+继承系统堆锁。底层分配返回的地址应交给相应分配器释放，不能把普通堆地址传给
+`rt_mp_free()` 或把对齐修正后的地址直接交给 `rt_smem_free()`。
 
 若同时开启 `RT_USING_FINSH` 与 `RT_USING_MEMTRACE`：
 

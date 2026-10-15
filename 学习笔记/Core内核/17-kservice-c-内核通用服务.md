@@ -1,6 +1,10 @@
 # `kservice.c`：内核通用服务学习笔记
 
-> 本笔记对应 `src/kservice.c`。它提供不属于某个具体内核对象的基础服务：位图操作、控制台输出、回溯、堆 API 包装、断言等。当前记录已讲部分，后续函数继续追加。
+> 本笔记对应 `src/kservice.c`，覆盖位图、控制台输出、回溯、使用率、堆 API 包装及断言。
+
+位图与 [07 调度](07-scheduler-up-c-单核优先级调度.md) 对照；堆 API 先看本章封装，
+再进入 [21 small mem](21-mem-c-小内存堆分配器.md)、
+[22 memheap](22-memheap-c-多内存区堆管理.md)、[24 slab](24-slab-c-页与小对象分配器.md)。
 
 ## 1. 文件定位
 
@@ -289,11 +293,15 @@ Hook 参数使用 `void **ptr`，可观察地址、尺寸和成功/失败结果�
 
 | 配置 | `_heap_lock()` 的机制 | 主要适用范围 |
 | --- | --- | --- |
-| `RT_USING_HEAP_ISR` | `rt_spin_lock_irqsave()` | 堆可在 ISR 使用 |
+| `RT_USING_HEAP_ISR` | `rt_spin_lock_irqsave()` | 提供 ISR 访问所需的外层锁形式，仍需核对底层算法与 Hook |
 | `RT_USING_MUTEX` | 堆专用 mutex | 普通线程上下文 |
 | 其他 | `rt_enter_critical()` | 简化配置 |
 
 线程系统尚未启动、`rt_thread_self()==RT_NULL` 时，mutex 版本不尝试取 mutex；启动阶段没有多线程竞争。
+
+外层堆锁不能消除底层自己的等待：例如 memheap 正常路径还会取每个 heap 的信号量。
+也不能据 `RT_USING_HEAP_ISR` 推断分配具有固定延迟；扫描、合并或大块复制可能延长
+关中断时间。中断中的实时数据宜优先使用预分配缓存、消息或专用固定块方案。
 
 若开启 `RT_USING_UTESTCASES`，源码还会以 `rt_heap_lock()` / `rt_heap_unlock()` 名字导出内部 `_heap_lock()` / `_heap_unlock()`，仅供单元测试观察锁行为；应用代码不应依赖这两个测试入口。
 
@@ -325,6 +333,9 @@ BSP 提供可用 RAM 的起止地址
 ### `rt_realloc(ptr, newsize)`
 
 底层可能原地扩展，也可能分配新块、复制旧数据、释放旧块。正确写法：
+
+下例假设 `new_size > 0`。若新长度为零，应显式释放并将指针清空；常见后端会在零
+长度重分配时释放原块并返回空，此时不能把空返回一概当成“旧块仍有效”。
 
 ```c
 void *new_ptr = rt_realloc(ptr, new_size);
