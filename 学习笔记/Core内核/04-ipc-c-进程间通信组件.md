@@ -1,4 +1,4 @@
-# `ipc.c`：RT-Thread IPC 组件学习笔记
+# 04. `ipc.c`：RT-Thread IPC 组件学习笔记
 
 > 本笔记对应 `src/ipc.c`。IPC（Inter-Process Communication）在 RT-Thread 的语境中更常表示**线程间通信与同步**：信号量、互斥锁、事件、邮箱、消息队列。
 

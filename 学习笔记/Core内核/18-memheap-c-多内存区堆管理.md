@@ -1,9 +1,9 @@
-# `memheap.c`：多内存区可变大小堆管理
+# 18. `memheap.c`：多内存区可变大小堆管理
 
 > 对应 `src/memheap.c`，仅在 `RT_USING_MEMHEAP` 开启时参与编译。它允许把内部 SRAM、外部 SDRAM、DMA 专用 RAM 等多段独立连续内存分别建立为 `rt_memheap` 对象。
 
-与 [21 small mem](21-mem-c-小内存堆分配器.md) 比较两条链的用途，再结合
-[17 系统堆封装](17-kservice-c-内核通用服务.md) 理解默认 heap 与自动回退。
+与 [17 small mem](17-mem-c-小内存堆分配器.md) 比较两条链的用途，再结合
+[16 系统堆封装](16-kservice-c-内核通用服务.md) 理解默认 heap 与自动回退。
 
 ## 1. 与 `small mem` 的定位差异
 

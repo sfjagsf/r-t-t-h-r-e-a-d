@@ -1,4 +1,4 @@
-# `components.c`：自动初始化框架学习笔记
+# 12. `components.c`：自动初始化框架学习笔记
 
 > 本笔记对应 `src/components.c`，包括自动初始化段、main 线程建立与内核启动顺序。
 

@@ -1,4 +1,4 @@
-# RT-Thread `thread.c` 学习笔记：线程生命周期、延时、挂起与恢复
+# 03. RT-Thread `thread.c` 学习笔记：线程生命周期、延时、挂起与恢复
 
 承接 [02 对象管理](02-object-c-统一对象管理.md)。建议先看本章“公开生命周期”部分，
 再回查 `_thread_init/_thread_timeout`；挂起与唤醒需要结合

@@ -1,4 +1,4 @@
-# `cpu_mp.c`：多核 CPU 对象与自旋锁学习笔记
+# 14. `cpu_mp.c`：多核 CPU 对象与自旋锁学习笔记
 
 > 本笔记对应 `src/cpu_mp.c`，仅在 `RT_USING_SMP` 开启时参与编译。`MP` 表示 Multiprocessor：多个 CPU 能真正并行执行内核代码。
 

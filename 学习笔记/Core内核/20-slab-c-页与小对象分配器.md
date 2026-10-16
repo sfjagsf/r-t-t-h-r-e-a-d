@@ -1,9 +1,9 @@
-# `slab.c`：页分配与小对象 Slab 分配器
+# 20. `slab.c`：页分配与小对象 Slab 分配器
 
 > 对应 `src/slab.c`，仅在 `RT_USING_SLAB` 开启时参与编译。Slab 在底层“连续页分配器”之上，为常见小尺寸请求建立固定 chunk 的 zone，减少频繁小对象申请的搜索成本与外部碎片。
 
-先读 [17 堆 API 分层](17-kservice-c-内核通用服务.md)，再与
-[21 small mem](21-mem-c-小内存堆分配器.md)、[22 memheap](22-memheap-c-多内存区堆管理.md)
+先读 [16 堆 API 分层](16-kservice-c-内核通用服务.md)，再与
+[17 small mem](17-mem-c-小内存堆分配器.md)、[18 memheap](18-memheap-c-多内存区堆管理.md)
 比较。Slab 的页是分配粒度，不表示本文件自动提供 MMU 虚拟地址映射或进程隔离。
 
 ## 1. 与前三种内存管理器的区别

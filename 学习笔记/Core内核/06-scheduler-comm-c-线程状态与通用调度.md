@@ -1,4 +1,4 @@
-# `scheduler_comm.c`：线程状态与通用调度学习笔记
+# 06. `scheduler_comm.c`：线程状态与通用调度学习笔记
 
 > 本笔记对应 `src/scheduler_comm.c`。该文件只放单核、SMP 都通用的线程状态转换与调度辅助逻辑；具体的就绪队列和线程选择算法在 `scheduler_up.c`、`scheduler_mp.c`。
 

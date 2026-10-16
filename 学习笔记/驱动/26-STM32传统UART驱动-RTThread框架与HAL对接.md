@@ -1,14 +1,14 @@
-# 30. STM32 传统 UART 驱动：RT-Thread 框架与 HAL 对接
+# 26. STM32 传统 UART 驱动：RT-Thread 框架与 HAL 对接
 
 > 对应源码：
 >
 > - `bsp/stm32/libraries/HAL_Drivers/drivers/drv_usart.c`
 > - `bsp/stm32/libraries/HAL_Drivers/drivers/drv_usart.h`
 >
-> 本章选用 STM32 BSP 共用 UART 驱动作为具体实例。它将第 29 节传统串口框架的
+> 本章选用 STM32 BSP 共用 UART 驱动作为具体实例。它将第 25 节传统串口框架的
 > `rt_uart_ops` 落实为 STM32 HAL、NVIC 中断、UART 寄存器与 DMA 操作。
 
-承接 [第 29 节](29-传统串口框架实现-打开读写与中断DMA.md)。本章以所列源码的传统
+承接 [第 25 节](25-传统串口框架实现-打开读写与中断DMA.md)。本章以所列源码的传统
 串口分支为依据；不同板卡的引脚、DMA 请求及 HAL 版本需要由对应 BSP 配置补足。
 
 建议沿三条路径对照阅读：`rt_hw_usart_init` 看对象注册，`stm32_getc/putc` 看字符收发，
@@ -241,7 +241,7 @@ RT_DEVICE_CTRL_SET_INT
 `RXNE` 表示接收数据寄存器非空。之后每接收一个字节，UART 会触发中断。
 
 对 `INT_TX`，此分支只启用 NVIC，没有对应的 `UART_IT_TC` 使能语句；后面的 `putc`
-又是等待 TC 的轮询实现。因此不能把第 29 节通用 completion 机制理解为本驱动一定
+又是等待 TC 的轮询实现。因此不能把第 25 节通用 completion 机制理解为本驱动一定
 实现了高效、完整的逐字 TX 中断流程。读源码时应分别检查 UART 外设中断源与 NVIC，
 仅开启 NVIC 并不意味着某个 UART 中断源已开启。
 
@@ -472,7 +472,7 @@ rt_hw_serial_isr(serial,
                  RT_SERIAL_EVENT_RX_DMADONE | (recv_len << 8));
 ```
 
-第 29 节的串口框架据此更新 FIFO 写索引并触发 `rx_indicate()`。这正是 STM32 常用
+第 25 节的串口框架据此更新 FIFO 写索引并触发 `rx_indicate()`。这正是 STM32 常用
 “DMA 环形接收 + IDLE/HT/TC 通知”机制与 RT-Thread 框架的连接点。IDLE 提供批次线索，
 完整协议帧仍应结合长度字段、帧头或校验等规则识别。
 
@@ -522,7 +522,7 @@ find("uart1") 并检查设备存在
 → 协调退出并 close
 ```
 
-初始化及回调示例见 [第 28 节](28-传统串口驱动接口-对象配置与硬件操作表.md)。若
+初始化及回调示例见 [第 24 节](24-传统串口驱动接口-对象配置与硬件操作表.md)。若
 `uart1` 已被控制台或其他模块占用，应先明确共享方式；设备名相同表示同一组打开状态、
 回调和收发缓存，并不会为新调用者创建独立通道。
 

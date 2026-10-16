@@ -1,4 +1,4 @@
-# 29. 传统串口框架实现：打开、读写与中断/DMA
+# 25. 传统串口框架实现：打开、读写与中断/DMA
 
 > 对应源码：`components/drivers/serial/dev_serial.c`。
 >
@@ -6,7 +6,7 @@
 > `serial.c`。本文件将上一节 `dev_serial.h` 定义的对象、FIFO、DMA 状态和硬件操作表，
 > 接入通用 `rt_device` 框架。
 
-承接 [第 28 节](28-传统串口驱动接口-对象配置与硬件操作表.md)。本章按“注册 → 打开
+承接 [第 24 节](24-传统串口驱动接口-对象配置与硬件操作表.md)。本章按“注册 → 打开
 资源 → 收发 → 中断推进 → 关闭”的顺序阅读。下文箭头分支均为流程示意。
 
 ## 1. 分层与职责
@@ -256,7 +256,7 @@ dma_transmit(serial, data, length, RT_SERIAL_DMA_RX);
 
 无 FIFO 分支在提交后返回请求长度，表示尝试发起接收，并不表示数据已到达；且当前
 实现未检查 `dma_transmit()` 的返回值。调用者应保持目标内存有效，等完成通知后再处理
-数据。是否支持这种模型取决于 BSP：第 30 节的 STM32 驱动只在 `dma_transmit` 中处理
+数据。是否支持这种模型取决于 BSP：第 26 节的 STM32 驱动只在 `dma_transmit` 中处理
 TX，RX 是打开时启动到框架 FIFO 的，因此不能直接使用此无 FIFO RX 分支。
 
 ## 8. 写入：`rt_serial_write()`
@@ -413,5 +413,5 @@ POSIX read
 6. `control()` 管理串口参数，并可选地提供 POSIX termios/ioctl 兼容；
 7. BSP 驱动下一步要实现的重点是 `rt_uart_ops` 与对 `rt_hw_serial_isr()` 的调用。
 
-继续阅读 [第 30 节：STM32 UART 与 HAL 对接](30-STM32传统UART驱动-RTThread框架与HAL对接.md)，
+继续阅读 [第 26 节：STM32 UART 与 HAL 对接](26-STM32传统UART驱动-RTThread框架与HAL对接.md)，
 把通用框架提供的模式与 STM32 BSP 真正实现的硬件能力逐项对照。

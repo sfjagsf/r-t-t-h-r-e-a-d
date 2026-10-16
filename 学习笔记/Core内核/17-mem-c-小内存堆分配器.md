@@ -1,8 +1,8 @@
-# `mem.c`：Small Memory 小内存堆分配器
+# 17. `mem.c`：Small Memory 小内存堆分配器
 
 > 对应 `src/mem.c`，仅在 `RT_USING_SMALL_MEM` 开启时参与编译。它是 RT-Thread 常见默认动态堆实现之一，为动态线程、动态 IPC、动态定时器等对象提供底层内存。
 
-先读 [17 系统堆封装](17-kservice-c-内核通用服务.md)，再追踪 `lfree`、`next/prev`
+先读 [16 系统堆封装](16-kservice-c-内核通用服务.md)，再追踪 `lfree`、`next/prev`
 及块头已用标志。`RT_USING_SMALL_MEM` 开启算法，`RT_USING_SMALL_MEM_AS_HEAP` 才将其
 选为通用 `rt_malloc()` 的后端，两者作用不同。
 

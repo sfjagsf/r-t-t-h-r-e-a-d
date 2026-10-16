@@ -1,4 +1,4 @@
-# `cpu_up.c`：单核 CPU 对象与自旋锁学习笔记
+# 13. `cpu_up.c`：单核 CPU 对象与自旋锁学习笔记
 
 > 本笔记对应 `src/cpu_up.c`。`UP` 是 Uniprocessor，表示单核版本；它为上层内核提供与 SMP 兼容的 CPU 对象和 spinlock 接口。
 

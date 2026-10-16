@@ -1,4 +1,4 @@
-# `scheduler_up.c`：单核优先级调度学习笔记
+# 07. `scheduler_up.c`：单核优先级调度学习笔记
 
 > 本笔记对应 `src/scheduler_up.c`，即单核（UP，Uniprocessor）调度器的具体实现。`scheduler_comm.c` 放通用状态转换；本文件负责 READY 队列、位图选线程、调度决策与单核上下文切换入口。
 

@@ -1,4 +1,4 @@
-# `scheduler_mp.c`：多核调度器学习笔记
+# 15. `scheduler_mp.c`：多核调度器学习笔记
 
 > 本笔记对应 `src/scheduler_mp.c`，仅在 `RT_USING_SMP` 开启时参与编译，覆盖多核
 > READY 队列、锁、IPI、上下文切换收尾、临界区与 CPU 绑定。

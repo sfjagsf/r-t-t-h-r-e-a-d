@@ -1,4 +1,4 @@
-# 27. 设备框架核心：通用设备 API 的实现
+# 23. 设备框架核心：通用设备 API 的实现
 
 > 对应源码：`components/drivers/core/device.c`。
 >
@@ -6,7 +6,7 @@
 > `include/rtthread.h` 只声明 `rt_device_*()`；本文件实现这些 API，负责设备的
 > **注册、查找、生命周期状态维护，以及向具体驱动分发调用**。
 
-承接 [第 26 节](26-设备框架头文件-通用设备对象与接口.md)。阅读重点是沿一次
+承接 [第 22 节](22-设备框架头文件-通用设备对象与接口.md)。阅读重点是沿一次
 `register → find → open → read/write → close` 路径，追踪 `flag`、`open_flag` 和
 `ref_count` 分别由谁修改。
 
@@ -329,5 +329,5 @@ RTM_EXPORT(rt_device_open);
 6. `rx_indicate/tx_complete` 是设备到上层的异步通知，而不是上层调用设备的操作接口。
 
 接下来经 `components/drivers/include/rtdevice.h` 的配置入口，阅读
-[第 28 节：传统串口接口](28-传统串口驱动接口-对象配置与硬件操作表.md)。串口将提供
+[第 24 节：传统串口接口](24-传统串口驱动接口-对象配置与硬件操作表.md)。串口将提供
 一组真正的设备回调，帮助把本章的通用流程落实到具体设备类别。

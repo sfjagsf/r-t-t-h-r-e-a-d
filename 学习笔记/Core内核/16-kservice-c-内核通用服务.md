@@ -1,10 +1,10 @@
-# `kservice.c`：内核通用服务学习笔记
+# 16. `kservice.c`：内核通用服务学习笔记
 
 > 本笔记对应 `src/kservice.c`，覆盖位图、控制台输出、回溯、使用率、堆 API 包装及断言。
 
 位图与 [07 调度](07-scheduler-up-c-单核优先级调度.md) 对照；堆 API 先看本章封装，
-再进入 [21 small mem](21-mem-c-小内存堆分配器.md)、
-[22 memheap](22-memheap-c-多内存区堆管理.md)、[24 slab](24-slab-c-页与小对象分配器.md)。
+再进入 [17 small mem](17-mem-c-小内存堆分配器.md)、
+[18 memheap](18-memheap-c-多内存区堆管理.md)、[20 slab](20-slab-c-页与小对象分配器.md)。
 
 ## 1. 文件定位
 
