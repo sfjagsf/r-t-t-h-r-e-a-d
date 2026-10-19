@@ -548,5 +548,5 @@ find("uart1") 并检查设备存在
 7. DMA RX 的 IDLE、HT、TC 事件经 `dma_recv_isr` 汇集为框架的 `RX_DMADONE` 事件；
 8. `rt_hw_usart_init` 注册每个启用的 STM32 UART，使其可按 `uart1` 等名称被访问。
 
-下一节可阅读 `bsp/stm32/libraries/HAL_Drivers/drivers/drv_dma.c`，理解本驱动调用的
+继续阅读 [第 27 节：STM32 DMA 公共层](27-STM32-DMA公共层-描述符初始化与资源关联.md)，理解本驱动调用的
 `stm32_dma_setup()`、`stm32_dma_deinit()` 如何配置具体 DMA 控制器、通道与请求源。
